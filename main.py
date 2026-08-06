@@ -14,16 +14,16 @@ logger = get_logger("main")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logger.info("Horizon Protector v3 booting...")
+    logger.info("up")
     start_monitor()
     yield
     stop_monitor()
-    logger.info("Horizon Protector v3 shutting down...")
+    logger.info("down")
 
 
 app = FastAPI(
-    title="Horizon Protector v3",
-    description="Live Roblox server tracker with encrypted heartbeats and Discord webhook PATCHing.",
+    title="what are you doing here?",
+    description="system",
     version="3.0.0",
     lifespan=lifespan,
     # Don't expose /docs or /redoc in production
