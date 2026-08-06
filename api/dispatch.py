@@ -1,11 +1,6 @@
 from __future__ import annotations
-import os
-import time
-import hmac
-import hashlib
-from typing import Any
-from fastapi import APIRouter, Request
-from fastapi.responses import JSONResponse
+import sys, os
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from lib.crypto import decrypt_payload
 from lib.validator import validate_payload
 from lib.sessions import SessionStore
