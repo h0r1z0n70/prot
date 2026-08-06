@@ -1,5 +1,7 @@
 # made by horizon from scratch ;)
 
+import sys, os
+sys.path.insert(0, os.path.dirname(__file__))
 from __future__ import annotations
 import os
 from contextlib import asynccontextmanager
