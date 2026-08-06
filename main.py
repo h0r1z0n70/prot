@@ -1,31 +1,29 @@
 # made by horizon from scratch ;)
 
 from __future__ import annotations
-import sys, os
-sys.path.insert(0, os.path.dirname(__file__))
 import os
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from lib.monitor import start_monitor, stop_monitor
 from lib.logger import get_logger
-from api import dispatch, health, token
+from api import dispatch, health, token, left
 
 logger = get_logger("main")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logger.info("up")
+    logger.info("Horizon Protector v3 booting...")
     start_monitor()
     yield
     stop_monitor()
-    logger.info("down")
+    logger.info("Horizon Protector v3 shutting down...")
 
 
 app = FastAPI(
-    title="what are you doing here?",
-    description="system",
+    title="Horizon Protector v3",
+    description="Live Roblox server tracker with encrypted heartbeats and Discord webhook PATCHing.",
     version="3.0.0",
     lifespan=lifespan,
     # Don't expose /docs or /redoc in production
@@ -44,13 +42,14 @@ app.add_middleware(
 app.include_router(dispatch.router)
 app.include_router(health.router)
 app.include_router(token.router)
+app.include_router(left.router)
 
 
 @app.get("/")
 async def root() -> dict:
     return {
-        "service": "webhook protector don't spam pls",
-        "status": "its working, now what are you doing here?",
+        "service": "Horizon Protector v3",
+        "status": "operational",
     }
 
 
