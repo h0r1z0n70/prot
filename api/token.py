@@ -1,5 +1,8 @@
 from __future__ import annotations
 import sys, os
+from fastapi import APIRouter, Request, Header
+from fastapi.responses import JSONResponse
+from lib.supabase_client import register_token, revoke_token
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from lib.crypto import decrypt_payload
 from lib.validator import validate_payload
