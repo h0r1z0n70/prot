@@ -49,8 +49,8 @@ app.include_router(token.router)
 @app.get("/")
 async def root() -> dict:
     return {
-        "service": "Horizon Protector v3",
-        "status": "operational",
+        "service": "webhook protector don't spam pls",
+        "status": "its working, now what are you doing here?",
     }
 
 
