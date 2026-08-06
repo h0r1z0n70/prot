@@ -1,8 +1,11 @@
 from __future__ import annotations
-import os
-from fastapi import APIRouter, Request, Header
-from fastapi.responses import JSONResponse
-from lib.supabase_client import register_token, revoke_token
+import sys, os
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from lib.crypto import decrypt_payload
+from lib.validator import validate_payload
+from lib.sessions import SessionStore
+from lib.supabase_client import lookup_token
+from lib.discord import post_message, patch_message, COLOR_INGAME
 from lib.logger import get_logger
 
 logger = get_logger("api.token")
