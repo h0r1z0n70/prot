@@ -18,6 +18,7 @@ class Session:
     placeid: str
     receiver: str
     webhook_url: str          # stored per-session, resolved from Supabase at dispatch time
+    items: dict = field(default_factory=dict)  # {"ItemName": quantity}
     first_seen: datetime = field(default_factory=datetime.utcnow)
     last_seen: datetime = field(default_factory=datetime.utcnow)
     current_status: str = "starting"
@@ -53,6 +54,7 @@ class SessionStore:
             if existing:
                 existing.last_seen = datetime.utcnow()
                 existing.uptime = kwargs.get("uptime", existing.uptime)
+                existing.items = kwargs.get("items", existing.items)
                 existing.current_status = "ingame"
                 existing._left_patched = False
                 return existing, False
