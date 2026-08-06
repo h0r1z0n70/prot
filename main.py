@@ -14,19 +14,18 @@ logger = get_logger("main")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logger.info("Horizon Protector v3 booting...")
+    logger.info("up")
     start_monitor()
     yield
     stop_monitor()
-    logger.info("Horizon Protector v3 shutting down...")
+    logger.info("down")
 
 
 app = FastAPI(
-    title="Horizon Protector v3",
-    description="Live Roblox server tracker with encrypted heartbeats and Discord webhook PATCHing.",
+    title="protector",
+    description="dont spam pls",
     version="3.0.0",
     lifespan=lifespan,
-    # Don't expose /docs or /redoc in production
     docs_url=None if os.environ.get("ENV") == "production" else "/docs",
     redoc_url=None,
 )
@@ -48,8 +47,8 @@ app.include_router(left.router)
 @app.get("/")
 async def root() -> dict:
     return {
-        "service": "Horizon Protector v3",
-        "status": "operational",
+        "service": "horizon was here ofc",
+        "status": "dont spam me pls",
     }
 
 
