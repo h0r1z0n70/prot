@@ -1,8 +1,8 @@
 # made by horizon from scratch ;)
 
+from __future__ import annotations
 import sys, os
 sys.path.insert(0, os.path.dirname(__file__))
-from __future__ import annotations
 import os
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
