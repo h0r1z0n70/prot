@@ -25,6 +25,6 @@ def validate_payload(data: dict[str, Any]) -> tuple[bool, str]:
     if not validate_jobid(data.get("jobid")):
         logger.warning("Invalid JobId received: %s", data.get("jobid"))
         return False, "Invalid JobId format"
-    if not isinstance(data.get("items"), list):
-        return False, "Field 'items' must be an array"
+    if not isinstance(data.get("items"), (list, dict)):
+        return False, "Field 'items' must be an object or array"
     return True, ""
