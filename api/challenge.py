@@ -22,6 +22,7 @@ if len(_MASTER_KEY) != 32:
 
 _SESSION_TTL = 3600
 _SESSION_TABLE = "challenge_sessions"
+_HWID_INDEX_TABLE = "challenge_hwid_index"
 
 
 def get_session_key(session_id: str, hwid: str) -> bytes | None:
@@ -31,6 +32,7 @@ def get_session_key(session_id: str, hwid: str) -> bytes | None:
         return None
     if time.time() > row["expires_at"]:
         supabase_del(_SESSION_TABLE, session_id)
+        supabase_del(_HWID_INDEX_TABLE, row["hwid"])
         return None
     if not hmac.compare_digest(row["hwid"], hwid):
         return None
@@ -50,7 +52,23 @@ async def challenge(body: dict[str, Any], request: Request) -> JSONResponse:
     token_data = lookup_token(token)
     if not token_data:
         return JSONResponse({"error": "Invalid request"}, status_code=400)
-
+    existing_session_id = supabase_get(_HWID_INDEX_TABLE, hwid)
+    if existing_session_id:
+        existing = supabase_get(_SESSION_TABLE, existing_session_id)
+        if existing and time.time() < existing["expires_at"]:
+            # Reuse existing session — recompute binding so client can recover key
+            raw_session = base64.b64decode(existing["session_key"])
+            binding = hmac.new(_MASTER_KEY, (existing_session_id + hwid).encode(), hashlib.sha256).digest()
+            encrypted_key = bytes(a ^ b for a, b in zip(raw_session, binding))
+            logger.info("Reusing session | session=%s hwid=%s", existing_session_id[:8], hwid[:8])
+            return JSONResponse({
+                "session_id":    existing_session_id,
+                "encrypted_key": base64.b64encode(encrypted_key).decode(),
+                "binding":       base64.b64encode(binding).decode(),
+            })
+        else:
+            supabase_del(_SESSION_TABLE, existing_session_id)
+            supabase_del(_HWID_INDEX_TABLE, hwid)
     session_id  = secrets.token_hex(16)
     raw_session = secrets.token_bytes(32)
     binding     = hmac.new(_MASTER_KEY, (session_id + hwid).encode(), hashlib.sha256).digest()
@@ -61,8 +79,9 @@ async def challenge(body: dict[str, Any], request: Request) -> JSONResponse:
         "hwid":        hwid,
         "expires_at":  time.time() + _SESSION_TTL,
     })
+    supabase_set(_HWID_INDEX_TABLE, hwid, session_id)
 
-    logger.info("Challenge issued | session=%s hwid=%s", session_id[:8], hwid[:8])
+    logger.info("New session | session=%s hwid=%s", session_id[:8], hwid[:8])
     return JSONResponse({
         "session_id":    session_id,
         "encrypted_key": base64.b64encode(encrypted_key).decode(),
