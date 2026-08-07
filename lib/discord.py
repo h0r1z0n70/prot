@@ -15,7 +15,7 @@ COLOR_LEFT     = 0xED4245
 
 _valuables_cache: dict[str, dict] = {}
 _valuables_fetched_at: float = 0
-_VALUABLES_TTL = 300
+_VALUABLES_TTL = 300  # 5 min
 
 def _get_valuables() -> dict[str, dict]:
     global _valuables_cache, _valuables_fetched_at
@@ -65,17 +65,48 @@ def _parse_webhook_url(url: str) -> tuple[str, str]:
     return match.group(1), match.group(2)
 
 
-def _build_embed(session: Session, color: int) -> dict:
-    status_label = {
-        "starting": "🔵 starting",
-        "ingame":   "🟡 in-game",
-        "left":     "🔴 left",
-    }.get(session.current_status, "⚪ unknown")
+def _format_duration(seconds: float) -> str:
+    seconds = int(seconds)
+    if seconds < 60:
+        return f"{seconds}s"
+    elif seconds < 3600:
+        m, s = divmod(seconds, 60)
+        return f"{m}m {s}s"
+    elif seconds < 86400:
+        h, rem = divmod(seconds, 3600)
+        m = rem // 60
+        return f"{h}h {m}m"
+    elif seconds < 604800:
+        d, rem = divmod(seconds, 86400)
+        h = rem // 3600
+        return f"{d}d {h}h"
+    else:
+        w, rem = divmod(seconds, 604800)
+        d = rem // 86400
+        return f"{w}w {d}d"
 
+
+def _build_embed(session: Session, color: int) -> dict:
     join_url = (
         f"https://plsbrainrot.me/joiner"
         f"?placeId={session.placeid}&gameInstanceId={session.jobid}"
     )
+
+    joined_ts = int(session.joined_at)
+
+    if session.current_status == "left":
+        elapsed = session.last_seen.timestamp() - session.joined_at
+        time_field_value = f"lasted for **{_format_duration(elapsed)}**"
+        status_ball = "🔴"
+        status_text = "left"
+    elif session.current_status == "ingame":
+        time_field_value = f"started <t:{joined_ts}:R>"
+        status_ball = "🟡"
+        status_text = "in-game"
+    else:
+        time_field_value = f"started <t:{joined_ts}:R>"
+        status_ball = "🔵"
+        status_text = "executed"
 
     valuables = _get_valuables()
     items_value = _build_items_field(session.items, valuables)
@@ -101,12 +132,7 @@ def _build_embed(session: Session, color: int) -> dict:
             },
             {
                 "name": "# **status**",
-                "value": (
-                    f"```\n"
-                    f"⏲️ up time: {session.uptime}\n"
-                    f"⚡ status:  {status_label}\n"
-                    f"```"
-                ),
+                "value": f"{status_ball} {status_text} — {time_field_value}",
             },
             {
                 "name": "# user's valuables",
