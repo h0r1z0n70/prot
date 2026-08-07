@@ -13,10 +13,8 @@ _SUPABASE_URL = os.environ.get("SUPABASE_URL", "").rstrip("/")
 _SUPABASE_SERVICE_KEY = os.environ.get("SUPABASE_SERVICE_KEY", "")
 _TABLE = "webhook_tokens"
 
-# In-memory cache: token_hash -> {webhook_url, username, fetched_at}
 _cache: dict[str, dict] = {}
-_CACHE_TTL = 60  # seconds
-
+_CACHE_TTL = 60
 
 def _headers() -> dict:
     return {
@@ -27,20 +25,10 @@ def _headers() -> dict:
 
 
 def _hash_token(token: str) -> str:
-    """SHA-256 the token so the raw value is never stored in memory logs."""
     return hashlib.sha256(token.encode()).hexdigest()
 
 
 def lookup_token(token: str) -> Optional[dict]:
-    """
-    Given a horizon$scripts-<uuid> token, return {webhook_url, username}
-    or None if not found / invalid.
-
-    Flow:
-      1. Check in-memory cache (TTL 60s) — avoids Supabase hammering.
-      2. Query Supabase by token_hash (never store raw token in DB).
-      3. Return result or None.
-    """
     if not _SUPABASE_URL or not _SUPABASE_SERVICE_KEY:
         logger.error("Supabase env vars not configured")
         return None
@@ -130,3 +118,41 @@ def revoke_token(token: str) -> bool:
 
     _cache.pop(token_hash, None)
     return resp.status_code in (200, 204)
+
+
+def supabase_get(table: str, key: str) -> dict | None:
+    url = f"{_SUPABASE_URL}/rest/v1/{table}?key=eq.{key}&select=*"
+    try:
+        resp = requests.get(url, headers=_headers(), timeout=5)
+        if resp.status_code == 200:
+            rows = resp.json()
+            return rows[0]["value"] if rows else None
+    except Exception as exc:
+        logger.error("supabase_get failed: %s", exc)
+    return None
+
+
+def supabase_set(table: str, key: str, value: dict) -> bool:
+    import json
+    url = f"{_SUPABASE_URL}/rest/v1/{table}"
+    payload = {"key": key, "value": json.dumps(value)}
+    try:
+        resp = requests.post(
+            url, json=payload,
+            headers={**_headers(), "Prefer": "resolution=merge-duplicates"},
+            timeout=5
+        )
+        return resp.status_code in (200, 201)
+    except Exception as exc:
+        logger.error("supabase_set failed: %s", exc)
+    return False
+
+
+def supabase_del(table: str, key: str) -> bool:
+    url = f"{_SUPABASE_URL}/rest/v1/{table}?key=eq.{key}"
+    try:
+        resp = requests.delete(url, headers=_headers(), timeout=5)
+        return resp.status_code in (200, 204)
+    except Exception as exc:
+        logger.error("supabase_del failed: %s", exc)
+    return False
