@@ -16,7 +16,6 @@ from lib.logger import get_logger
 logger = get_logger("api.dispatch")
 router = APIRouter()
 
-
 class _RateLimiter:
     def __init__(self, max_req: int = 10, window: int = 60):
         self.max_req = max_req
@@ -27,8 +26,6 @@ class _RateLimiter:
 
     def is_allowed(self, identifier: str) -> tuple[bool, str]:
         now = time.time()
-
-        # Hard block check (escalating)
         blocked_until = self._blocked.get(identifier, 0)
         if now < blocked_until:
             return False, f"Blocked for {int(blocked_until - now)}s"
@@ -39,7 +36,6 @@ class _RateLimiter:
         if len(alive) >= self.max_req:
             strikes = self._strike.get(identifier, 0) + 1
             self._strike[identifier] = strikes
-            # Escalating block: 60s, 5min, 1hr
             block_duration = [60, 300, 3600][min(strikes - 1, 2)]
             self._blocked[identifier] = now + block_duration
             logger.warning("Rate abuse | ident=%s strike=%d block=%ds", identifier, strikes, block_duration)
@@ -59,7 +55,6 @@ _TOKEN_PREFIX = "horizon$scripts-"
 
 
 def _validate_token_format(token: str) -> bool:
-    """Quick format check before hitting Supabase."""
     if not token.startswith(_TOKEN_PREFIX):
         return False
     uuid_part = token[len(_TOKEN_PREFIX):]
@@ -86,14 +81,11 @@ async def dispatch(payload: dict[str, Any], request: Request) -> JSONResponse:
 
     token = payload.get("token", "")
     if not isinstance(token, str) or not _validate_token_format(token):
-        # Don't reveal what's wrong — just generic error
         logger.warning("Bad token format | ident=%s", ident)
-        return JSONResponse({"error": "Invalid request"}, status_code=400)
-
+        return JSONResponse({"error": "Invalid request"}, status_code=400
     token_data = lookup_token(token)
     if not token_data:
         logger.warning("Token lookup failed | ident=%s", ident)
-        # Same generic error — don't reveal token exists or not
         return JSONResponse({"error": "Invalid request"}, status_code=400)
 
     webhook_url = token_data["webhook_url"]
@@ -122,8 +114,8 @@ async def dispatch(payload: dict[str, Any], request: Request) -> JSONResponse:
         hwid=data["hwid"],
         placeid=data["placeid"],
         receiver=data["receiver"],
-        uptime=data.get("uptime", ""),
         items=data.get("items", {}),
+        joined_at=data.get("joined_at", __import__("time").time()),
         webhook_url=webhook_url,
     )
 
