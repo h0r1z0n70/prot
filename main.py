@@ -7,25 +7,26 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from lib.monitor import start_monitor, stop_monitor
 from lib.logger import get_logger
-from api import dispatch, health, token, left
+from api import dispatch, health, token, left, challenge
 
 logger = get_logger("main")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logger.info("up")
+    logger.info("Horizon Protector botoing.")
     start_monitor()
     yield
     stop_monitor()
-    logger.info("down")
+    logger.info("Horizon Protector shutting down.)
 
 
 app = FastAPI(
-    title="protector",
-    description="dont spam pls",
+    title="Horizon Protector v3",
+    description="env",
     version="3.0.0",
     lifespan=lifespan,
+    # Don't expose /docs or /redoc in production
     docs_url=None if os.environ.get("ENV") == "production" else "/docs",
     redoc_url=None,
 )
@@ -42,13 +43,14 @@ app.include_router(dispatch.router)
 app.include_router(health.router)
 app.include_router(token.router)
 app.include_router(left.router)
+app.include_router(challenge.router)
 
 
 @app.get("/")
 async def root() -> dict:
     return {
-        "service": "horizon was here ofc",
-        "status": "dont spam me pls",
+        "service": "don't spam me pls",
+        "status": "gay",
     }
 
 
