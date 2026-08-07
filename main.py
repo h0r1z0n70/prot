@@ -18,7 +18,7 @@ async def lifespan(app: FastAPI):
     start_monitor()
     yield
     stop_monitor()
-    logger.info("Horizon Protector shutting down.)
+    logger.info("Horizon Protector shutting down.")
 
 
 app = FastAPI(
@@ -26,7 +26,6 @@ app = FastAPI(
     description="env",
     version="3.0.0",
     lifespan=lifespan,
-    # Don't expose /docs or /redoc in production
     docs_url=None if os.environ.get("ENV") == "production" else "/docs",
     redoc_url=None,
 )
