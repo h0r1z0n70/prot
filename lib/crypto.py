@@ -13,8 +13,8 @@ logger = get_logger("crypto")
 _RAW_KEY = os.environ.get("WEBHOOK_KEY", "").encode()
 _MASTER_KEY: bytes = _RAW_KEY if len(_RAW_KEY) == 32 else hashlib.sha256(_RAW_KEY).digest()
 
-_NONCE_LEN = 12   # 96-bit GCM nonce, standard/recommended size
-_TAG_LEN = 16     # 128-bit GCM auth tag, appended to ciphertext by AESGCM
+_NONCE_LEN = 12
+_TAG_LEN = 16
 
 
 def encrypt_payload(data: dict[str, Any], key: bytes | None = None) -> str:
