@@ -3,6 +3,7 @@ import os
 import time
 import hmac
 import hashlib
+import re
 from typing import Any
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
@@ -15,24 +16,22 @@ from lib.logger import get_logger
 
 logger = get_logger("api.dispatch")
 router = APIRouter()
+
 class _RateLimiter:
     def __init__(self, max_req: int = 10, window: int = 60):
         self.max_req = max_req
         self.window = window
         self._store: dict[str, list[float]] = {}
-        self._blocked: dict[str, float] = {} 
+        self._blocked: dict[str, float] = {}
         self._strike: dict[str, int] = {}
 
     def is_allowed(self, identifier: str) -> tuple[bool, str]:
         now = time.time()
-
         blocked_until = self._blocked.get(identifier, 0)
         if now < blocked_until:
             return False, f"Blocked for {int(blocked_until - now)}s"
-
         timestamps = self._store.get(identifier, [])
         alive = [t for t in timestamps if now - t < self.window]
-
         if len(alive) >= self.max_req:
             strikes = self._strike.get(identifier, 0) + 1
             self._strike[identifier] = strikes
@@ -40,11 +39,9 @@ class _RateLimiter:
             self._blocked[identifier] = now + block_duration
             logger.warning("Rate abuse | ident=%s strike=%d block=%ds", identifier, strikes, block_duration)
             return False, "Rate limit exceeded"
-
         alive.append(now)
         self._store[identifier] = alive
         return True, ""
-
 
 _limiter = _RateLimiter(
     max_req=int(os.environ.get("RATE_LIMIT_MAX", "10")),
@@ -53,18 +50,14 @@ _limiter = _RateLimiter(
 
 _TOKEN_PREFIX = "horizon$scripts-"
 
-
 def _validate_token_format(token: str) -> bool:
-    """Quick format check before hitting Supabase."""
     if not token.startswith(_TOKEN_PREFIX):
         return False
     uuid_part = token[len(_TOKEN_PREFIX):]
-    import re
     return bool(re.match(
         r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
         uuid_part, re.IGNORECASE
     ))
-
 
 @router.post("/api/v3/dispatch")
 async def dispatch(payload: dict[str, Any], request: Request) -> JSONResponse:
@@ -72,30 +65,41 @@ async def dispatch(payload: dict[str, Any], request: Request) -> JSONResponse:
     client_ip = forwarded.split(",")[0].strip() if forwarded else (
         request.client.host if request.client else "unknown"
     )
-    hwid = request.headers.get("x-hwid", client_ip)
-    ident = f"{hwid}:{client_ip}"
+    hwid_header = request.headers.get("x-hwid", client_ip)
+    ident = f"{hwid_header}:{client_ip}"
 
     allowed, reason = _limiter.is_allowed(ident)
     if not allowed:
         logger.warning("Rate limited | ident=%s reason=%s", ident, reason)
         return JSONResponse({"error": reason}, status_code=429)
+
     token = payload.get("token", "")
     if not isinstance(token, str) or not _validate_token_format(token):
         logger.warning("Bad token format | ident=%s", ident)
         return JSONResponse({"error": "Invalid request"}, status_code=400)
+
     token_data = lookup_token(token)
     if not token_data:
         logger.warning("Token lookup failed | ident=%s", ident)
         return JSONResponse({"error": "Invalid request"}, status_code=400)
 
     webhook_url = token_data["webhook_url"]
+
     encrypted = payload.get("payload")
     if not encrypted or not isinstance(encrypted, str):
         return JSONResponse({"error": "Invalid request"}, status_code=400)
 
+    session_id = payload.get("session_id")
+    decryption_key = None
+    if session_id and isinstance(session_id, str):
+        store = SessionStore()
+        session_data = store.get_session(session_id)
+        if session_data:
+            decryption_key = session_data.get("session_key")
+
     try:
-        data = decrypt_payload(encrypted)
-    except ValueError as exc:
+        data = decrypt_payload(encrypted, key=decryption_key)
+    except ValueError:
         return JSONResponse({"error": "Invalid request"}, status_code=400)
 
     valid, err = validate_payload(data)
@@ -114,7 +118,7 @@ async def dispatch(payload: dict[str, Any], request: Request) -> JSONResponse:
         placeid=data["placeid"],
         receiver=data["receiver"],
         items=data.get("items", {}),
-        joined_at=data.get("joined_at", __import__("time").time()),
+        joined_at=data.get("joined_at", time.time()),
         webhook_url=webhook_url,
     )
 
