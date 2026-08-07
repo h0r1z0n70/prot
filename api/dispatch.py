@@ -1,8 +1,6 @@
 from __future__ import annotations
 import os
 import time
-import hmac
-import hashlib
 import re
 from typing import Any
 from fastapi import APIRouter, Request
@@ -93,9 +91,7 @@ async def dispatch(payload: dict[str, Any], request: Request) -> JSONResponse:
     decryption_key = None
     if session_id and isinstance(session_id, str):
         store = SessionStore()
-        session_data = store.get_session(session_id)
-        if session_data:
-            decryption_key = session_data.get("session_key")
+        decryption_key = store.get_session_key(session_id)
 
     try:
         data = decrypt_payload(encrypted, key=decryption_key)
