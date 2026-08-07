@@ -74,10 +74,7 @@ def lookup_token(token: str) -> Optional[dict]:
 
 
 def register_token(webhook_url: str, username: str) -> Optional[str]:
-    """
-    Create a new horizon$scripts-<uuid> token, store only its hash in Supabase.
-    Returns the raw token (shown once, never stored).
-    """
+
     import uuid
     raw_token = f"horizon$scripts-{uuid.uuid4()}"
     token_hash = _hash_token(raw_token)
@@ -104,7 +101,6 @@ def register_token(webhook_url: str, username: str) -> Optional[str]:
 
 
 def revoke_token(token: str) -> bool:
-    """Mark a token as revoked. Cache entry is also cleared."""
     token_hash = _hash_token(token)
     url = (
         f"{_SUPABASE_URL}/rest/v1/{_TABLE}"
@@ -126,7 +122,10 @@ def supabase_get(table: str, key: str) -> dict | None:
         resp = requests.get(url, headers=_headers(), timeout=5)
         if resp.status_code == 200:
             rows = resp.json()
-            return rows[0]["value"] if rows else None
+            if rows:
+                import json
+                val = rows[0]["value"]
+                return json.loads(val) if isinstance(val, str) else val
     except Exception as exc:
         logger.error("supabase_get failed: %s", exc)
     return None
