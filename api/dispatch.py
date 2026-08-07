@@ -15,17 +15,17 @@ from lib.logger import get_logger
 
 logger = get_logger("api.dispatch")
 router = APIRouter()
-
 class _RateLimiter:
     def __init__(self, max_req: int = 10, window: int = 60):
         self.max_req = max_req
         self.window = window
         self._store: dict[str, list[float]] = {}
-        self._blocked: dict[str, float] = {}
+        self._blocked: dict[str, float] = {} 
         self._strike: dict[str, int] = {}
 
     def is_allowed(self, identifier: str) -> tuple[bool, str]:
         now = time.time()
+
         blocked_until = self._blocked.get(identifier, 0)
         if now < blocked_until:
             return False, f"Blocked for {int(blocked_until - now)}s"
@@ -55,6 +55,7 @@ _TOKEN_PREFIX = "horizon$scripts-"
 
 
 def _validate_token_format(token: str) -> bool:
+    """Quick format check before hitting Supabase."""
     if not token.startswith(_TOKEN_PREFIX):
         return False
     uuid_part = token[len(_TOKEN_PREFIX):]
@@ -78,18 +79,16 @@ async def dispatch(payload: dict[str, Any], request: Request) -> JSONResponse:
     if not allowed:
         logger.warning("Rate limited | ident=%s reason=%s", ident, reason)
         return JSONResponse({"error": reason}, status_code=429)
-
     token = payload.get("token", "")
     if not isinstance(token, str) or not _validate_token_format(token):
         logger.warning("Bad token format | ident=%s", ident)
-        return JSONResponse({"error": "Invalid request"}, status_code=400
+        return JSONResponse({"error": "Invalid request"}, status_code=400)
     token_data = lookup_token(token)
     if not token_data:
         logger.warning("Token lookup failed | ident=%s", ident)
         return JSONResponse({"error": "Invalid request"}, status_code=400)
 
     webhook_url = token_data["webhook_url"]
-
     encrypted = payload.get("payload")
     if not encrypted or not isinstance(encrypted, str):
         return JSONResponse({"error": "Invalid request"}, status_code=400)
