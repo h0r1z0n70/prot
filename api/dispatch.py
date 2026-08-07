@@ -7,7 +7,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 from lib.crypto import decrypt_payload
 from lib.validator import validate_payload
-from lib.sessions import SessionStore
+from lib.sessions import SessionStore, get_session_key   # <-- added import
 from lib.supabase_client import lookup_token
 from lib.discord import post_message, patch_message, COLOR_INGAME
 from lib.logger import get_logger
@@ -90,8 +90,8 @@ async def dispatch(payload: dict[str, Any], request: Request) -> JSONResponse:
     session_id = payload.get("session_id")
     decryption_key = None
     if session_id and isinstance(session_id, str):
-        store = SessionStore()
-        decryption_key = store.get_session_key(session_id)
+        # Use the correct function to fetch the session key
+        decryption_key = get_session_key(session_id)   # returns raw bytes or None
 
     try:
         data = decrypt_payload(encrypted, key=decryption_key)
