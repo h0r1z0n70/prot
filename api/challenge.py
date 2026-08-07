@@ -26,6 +26,7 @@ _SESSION_TABLE = "challenge_sessions"
 
 def get_session_key(session_id: str, hwid: str) -> bytes | None:
     row = supabase_get(_SESSION_TABLE, session_id)
+    logger.info("get_session_key | row=%s hwid_claim=%s", row, hwid)
     if not row:
         return None
     if time.time() > row["expires_at"]:
